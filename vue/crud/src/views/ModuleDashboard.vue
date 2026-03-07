@@ -14,7 +14,11 @@
         </div>
       </div>
       <div class="toolbar-right">
-        <!-- 搜索框：修改点 1 -> 加入 @input 实现实时搜索 -->
+        <el-button type="primary" plain @click="emit('open-system-dashboard')">
+          <el-icon><DataLine /></el-icon>
+          系统统计
+        </el-button>
+        
         <el-input
           v-model="searchQuery"
           placeholder="搜索表名或描述..."
@@ -41,6 +45,21 @@
               <el-icon><Tickets /></el-icon>
             </div>
           </el-tooltip>
+        </div>
+
+        <!-- 用户信息和登出 -->
+        <div class="user-info">
+          <el-dropdown trigger="click">
+            <div class="user-avatar">
+              <el-icon><User /></el-icon>
+              <span>{{ userName }}</span>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="handleLogout"><el-icon><SwitchButton /></el-icon> 退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </div>
@@ -79,7 +98,7 @@
           </div>
         </el-collapse-transition>
 
-        <!-- 3. 快速构建 (保持不变) -->
+        <!-- 3. 快速构建 -->
         <div class="section-label" :class="{ 'mt-20': showAnalytics }">
           <span>快速构建 / BUILD</span>
           <div class="divider"></div>
@@ -88,6 +107,18 @@
           <div class="create-card excel" @click="openCreateModal('excel')">
             <div class="c-icon-bg green"><el-icon><DocumentAdd /></el-icon></div>
             <div class="c-info"><span class="c-title">Import Excel</span><span class="c-desc">解析 .xlsx 自动建表</span></div>
+          </div>
+          <div class="create-card csv" @click="openCreateModal('csv')">
+            <div class="c-icon-bg orange"><el-icon><Document /></el-icon></div>
+            <div class="c-info"><span class="c-title">Import CSV</span><span class="c-desc">解析 .csv 自动建表</span></div>
+          </div>
+          <div class="create-card json" @click="openCreateModal('json')">
+            <div class="c-icon-bg purple"><el-icon><Tickets /></el-icon></div>
+            <div class="c-info"><span class="c-title">Import JSON</span><span class="c-desc">解析 .json 自动建表</span></div>
+          </div>
+          <div class="create-card database" @click="openCreateModal('database')">
+            <div class="c-icon-bg cyan"><el-icon><Coin /></el-icon></div>
+            <div class="c-info"><span class="c-title">Import Database</span><span class="c-desc">从现有表导入</span></div>
           </div>
           <div class="create-card blank" @click="openCreateModal('blank')">
             <div class="c-icon-bg blue"><el-icon><Plus /></el-icon></div>
@@ -224,13 +255,129 @@
     </el-scrollbar>
 
     <!-- 弹窗：新建/编辑 -->
-    <el-dialog v-model="createDialogVisible" width="480px" destroy-on-close :title="isEditMode ? '编辑模块配置' : (createType==='excel'?'导入 Excel':'新建数据表')">
+    <el-dialog v-model="createDialogVisible" width="600px" destroy-on-close :title="getDialogTitle()">
        <el-form label-position="top" :model="createForm">
-          <div v-if="createType==='excel' && !isEditMode" class="upload-box">
-             <el-icon size="50" color="#909399"><UploadFilled /></el-icon>
-             <p>暂未实现 Excel 上传，请使用手动创建</p>
+          <!-- Excel导入 -->
+          <div v-if="createType==='excel' && !isEditMode" class="excel-upload-section">
+             <el-upload
+               ref="uploadRef"
+               class="upload-demo"
+               drag
+               :auto-upload="false"
+               :limit="1"
+               accept=".xlsx,.xls"
+               :on-change="handleFileChange"
+               :on-exceed="handleExceed"
+               :file-list="fileList"
+             >
+               <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+               <div class="el-upload__text">将 Excel 文件拖到此处，或<em>点击上传</em></div>
+               <template #tip><div class="el-upload__tip">只能上传 xlsx/xls 文件，且不超过 10MB</div></template>
+             </el-upload>
+             <el-divider></el-divider>
+             <el-form-item label="模块名称（可选）"><el-input v-model="excelForm.moduleName" placeholder="留空将使用文件名" /></el-form-item>
+             <el-form-item label="表名（可选）"><el-input v-model="excelForm.tableName" placeholder="留空将自动生成"><template #prepend>tb_</template></el-input></el-form-item>
           </div>
-          <template v-else>
+          
+          <!-- CSV导入 -->
+          <div v-else-if="createType==='csv' && !isEditMode" class="excel-upload-section">
+             <el-radio-group v-model="csvForm.inputMode" style="margin-bottom: 15px">
+               <el-radio-button label="file">文件上传</el-radio-button>
+               <el-radio-button label="text">文本输入</el-radio-button>
+             </el-radio-group>
+             
+             <div v-if="csvForm.inputMode === 'file'">
+               <el-upload
+                 ref="uploadRef"
+                 class="upload-demo"
+                 drag
+                 :auto-upload="false"
+                 :limit="1"
+                 accept=".csv"
+                 :on-change="handleFileChange"
+                 :on-exceed="handleExceed"
+                 :file-list="fileList"
+               >
+                 <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                 <div class="el-upload__text">将 CSV 文件拖到此处，或<em>点击上传</em></div>
+                 <template #tip><div class="el-upload__tip">只能上传 csv 文件，且不超过 10MB</div></template>
+               </el-upload>
+             </div>
+             
+             <div v-else>
+               <el-input
+                 v-model="csvForm.textContent"
+                 type="textarea"
+                 :rows="10"
+                 placeholder="请粘贴CSV内容，例如：&#10;姓名,年龄,部门&#10;张三,25,技术部&#10;李四,30,市场部"
+               />
+             </div>
+             
+             <el-divider></el-divider>
+             <el-form-item label="分隔符"><el-input v-model="csvForm.delimiter" placeholder="默认为逗号(,)" style="width: 100px" /></el-form-item>
+             <el-form-item label="模块名称（可选）"><el-input v-model="csvForm.moduleName" placeholder="留空将自动生成" /></el-form-item>
+             <el-form-item label="表名（可选）"><el-input v-model="csvForm.tableName" placeholder="留空将自动生成"><template #prepend>tb_</template></el-input></el-form-item>
+          </div>
+          
+          <!-- JSON导入 -->
+          <div v-else-if="createType==='json' && !isEditMode" class="excel-upload-section">
+             <el-radio-group v-model="jsonForm.inputMode" style="margin-bottom: 15px">
+               <el-radio-button label="file">文件上传</el-radio-button>
+               <el-radio-button label="text">文本输入</el-radio-button>
+             </el-radio-group>
+             
+             <div v-if="jsonForm.inputMode === 'file'">
+               <el-upload
+                 ref="uploadRef"
+                 class="upload-demo"
+                 drag
+                 :auto-upload="false"
+                 :limit="1"
+                 accept=".json"
+                 :on-change="handleFileChange"
+                 :on-exceed="handleExceed"
+                 :file-list="fileList"
+               >
+                 <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                 <div class="el-upload__text">将 JSON 文件拖到此处，或<em>点击上传</em></div>
+                 <template #tip><div class="el-upload__tip">支持对象数组或包含data字段的对象</div></template>
+               </el-upload>
+             </div>
+             
+             <div v-else>
+               <el-input
+                 v-model="jsonForm.textContent"
+                 type="textarea"
+                 :rows="10"
+                 placeholder="请粘贴JSON内容，例如：&#10;[&#10;  {&quot;name&quot;: &quot;张三&quot;, &quot;age&quot;: 25},&#10;  {&quot;name&quot;: &quot;李四&quot;, &quot;age&quot;: 30}&#10;]"
+               />
+             </div>
+             
+             <el-divider></el-divider>
+             <el-form-item label="模块名称（可选）"><el-input v-model="jsonForm.moduleName" placeholder="留空将自动生成" /></el-form-item>
+             <el-form-item label="表名（可选）"><el-input v-model="jsonForm.tableName" placeholder="留空将自动生成"><template #prepend>tb_</template></el-input></el-form-item>
+          </div>
+          
+          <!-- 数据库表导入 -->
+          <div v-else-if="createType==='database' && !isEditMode" class="database-import-section">
+             <el-alert type="info" :closable="false" style="margin-bottom: 20px">
+               <template #title>从现有数据库表导入</template>
+               选择数据库中已存在的表，系统将自动生成对应的模块和字段配置
+             </el-alert>
+             <el-form-item label="选择数据库表">
+               <el-select v-model="databaseForm.selectedTable" placeholder="请选择要导入的表" style="width: 100%" filterable>
+                 <el-option v-for="table in existingTables" :key="table.tableName" :label="table.tableName + (table.tableComment ? ' - ' + table.tableComment : '')" :value="table.tableName">
+                   <span>{{ table.tableName }}</span>
+                   <span style="color: #8492a6; font-size: 13px; margin-left: 8px">{{ table.tableComment || '无注释' }}</span>
+                   <span style="float: right; color: #8492a6; font-size: 12px">{{ table.tableRows }} 行</span>
+                 </el-option>
+               </el-select>
+             </el-form-item>
+             <el-form-item label="模块名称（可选）"><el-input v-model="databaseForm.moduleName" placeholder="留空将使用表名" /></el-form-item>
+          </div>
+          
+          <!-- 手动创建 -->
+          <template v-else-if="createType==='blank'">
             <el-form-item label="模块名称 (显示名)"><el-input v-model="createForm.moduleName" placeholder="例如：员工信息" /></el-form-item>
             <el-form-item label="数据库表名 (英文)">
               <el-input v-model="createForm.tableName" placeholder="employee" :disabled="isEditMode"><template #prepend v-if="!isEditMode">tb_</template></el-input>
@@ -247,7 +394,9 @@
        <template #footer>
           <div class="dialog-footer">
             <el-button @click="createDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="handleSubmit" :loading="loading">{{ isEditMode ? '保存修改' : '立即创建' }}</el-button>
+            <el-button type="primary" @click="handleSubmit" :loading="loading">
+              {{ isEditMode ? '保存修改' : (createType === 'excel' ? '开始导入' : '立即创建') }}
+            </el-button>
           </div>
        </template>
     </el-dialog>
@@ -261,11 +410,30 @@ import {
   Search, Menu, Tickets, DocumentAdd, Plus, MoreFilled, 
   UploadFilled, Delete, User, Goods, List, Setting, DataLine, 
   Briefcase, Folder, Files, Coin, Odometer, TrendCharts, InfoFilled,
-  RefreshLeft, EditPen
+  RefreshLeft, EditPen, SwitchButton
 } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
-const emit = defineEmits(['open-module']);
+const emit = defineEmits(['open-module', 'logout', 'open-system-dashboard']);
+
+// --- User Info ---
+const userName = ref('');
+
+// 从本地存储获取用户名
+const getUserInfo = () => {
+  const user = localStorage.getItem('user');
+  if (user) {
+    try {
+      const userObj = JSON.parse(user);
+      userName.value = userObj.username || '用户';
+    } catch (error) {
+      console.error('解析用户信息失败', error);
+      userName.value = '用户';
+    }
+  } else {
+    userName.value = '用户';
+  }
+};
 
 // --- State ---
 const showAnalytics = ref(true);
@@ -296,6 +464,36 @@ const createForm = reactive({
   icon: 'List',
   themeColor: '#e6f7ff'
 });
+
+const excelForm = reactive({
+  moduleName: '',
+  tableName: ''
+});
+
+const csvForm = reactive({
+  inputMode: 'file',
+  delimiter: ',',
+  moduleName: '',
+  tableName: '',
+  textContent: ''
+});
+
+const jsonForm = reactive({
+  inputMode: 'file',
+  moduleName: '',
+  tableName: '',
+  textContent: ''
+});
+
+const databaseForm = reactive({
+  selectedTable: '',
+  moduleName: ''
+});
+
+const existingTables = ref<any[]>([]);
+const fileList = ref<any[]>([]);
+const selectedFile = ref<File | null>(null);
+const uploadRef = ref();
 
 // --- Computed ---
 const filteredDeletedModules = computed(() => {
@@ -386,7 +584,7 @@ const fetchStats = async () => {
 
 // --- Operations ---
 
-const openCreateModal = (type: string) => {
+const openCreateModal = async (type: string) => {
   createType.value = type;
   isEditMode.value = false;
   createForm.id = null;
@@ -394,7 +592,51 @@ const openCreateModal = (type: string) => {
   createForm.tableName = '';
   createForm.icon = 'List';
   createForm.themeColor = '#e6f7ff';
+  excelForm.moduleName = '';
+  excelForm.tableName = '';
+  csvForm.inputMode = 'file';
+  csvForm.delimiter = ',';
+  csvForm.moduleName = '';
+  csvForm.tableName = '';
+  csvForm.textContent = '';
+  jsonForm.inputMode = 'file';
+  jsonForm.moduleName = '';
+  jsonForm.tableName = '';
+  jsonForm.textContent = '';
+  databaseForm.selectedTable = '';
+  databaseForm.moduleName = '';
+  fileList.value = [];
+  selectedFile.value = null;
+  
+  if (type === 'database') {
+    await fetchExistingTables();
+  }
+  
   createDialogVisible.value = true;
+};
+
+const fetchExistingTables = async () => {
+  try {
+    const res = await axios.get('/api/module/existing-tables');
+    if (res.data.code === 200) {
+      existingTables.value = res.data.data || [];
+    }
+  } catch (error) {
+    console.error(error);
+    ElMessage.error('获取数据库表列表失败');
+  }
+};
+
+const getDialogTitle = () => {
+  if (isEditMode.value) return '编辑模块配置';
+  switch (createType.value) {
+    case 'excel': return '导入 Excel 创建表';
+    case 'csv': return '导入 CSV 创建表';
+    case 'json': return '导入 JSON 创建表';
+    case 'database': return '从数据库表导入';
+    case 'blank': return '新建数据表';
+    default: return '新建数据表';
+  }
 };
 
 const handleEdit = async (mod: any) => {
@@ -423,9 +665,223 @@ const handleEdit = async (mod: any) => {
 
 const handleSubmit = async () => {
   if(createType.value === 'excel' && !isEditMode.value) {
-    ElMessage.info("Excel 导入功能暂未对接");
+    if (!selectedFile.value) {
+      ElMessage.warning("请选择要上传的Excel文件");
+      return;
+    }
+    
+    loading.value = true;
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile.value);
+      if (excelForm.moduleName) {
+        formData.append('moduleName', excelForm.moduleName);
+      }
+      if (excelForm.tableName) {
+        formData.append('tableName', excelForm.tableName);
+      }
+      
+      const res = await axios.post('/api/module/import-excel', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      if (res.data.code === 200) {
+        const result = res.data.data;
+        ElMessage.success(`导入成功！共导入 ${result.successRows} 条数据`);
+        createDialogVisible.value = false;
+        refreshAll();
+      } else {
+        ElMessage.error(res.data.message || "导入失败");
+      }
+    } catch (error: any) {
+      console.error(error);
+      ElMessage.error(error.response?.data?.message || "导入失败，请检查文件格式");
+    } finally {
+      loading.value = false;
+    }
     return;
   }
+  
+  if(createType.value === 'csv' && !isEditMode.value) {
+    if (csvForm.inputMode === 'file') {
+      if (!selectedFile.value) {
+        ElMessage.warning("请选择要上传的CSV文件");
+        return;
+      }
+      
+      loading.value = true;
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile.value);
+        if (csvForm.delimiter) {
+          formData.append('delimiter', csvForm.delimiter);
+        }
+        if (csvForm.moduleName) {
+          formData.append('moduleName', csvForm.moduleName);
+        }
+        if (csvForm.tableName) {
+          formData.append('tableName', csvForm.tableName);
+        }
+        
+        const res = await axios.post('/api/module/import-csv', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        if (res.data.code === 200) {
+          const result = res.data.data;
+          ElMessage.success(`导入成功！共导入 ${result.successRows} 条数据`);
+          createDialogVisible.value = false;
+          refreshAll();
+        } else {
+          ElMessage.error(res.data.message || "导入失败");
+        }
+      } catch (error: any) {
+        console.error(error);
+        ElMessage.error(error.response?.data?.message || "导入失败，请检查文件格式");
+      } finally {
+        loading.value = false;
+      }
+      return;
+    } else {
+      if (!csvForm.textContent || !csvForm.textContent.trim()) {
+        ElMessage.warning("请输入CSV内容");
+        return;
+      }
+      
+      loading.value = true;
+      try {
+        const res = await axios.post('/api/module/import-csv-text', {
+          csvContent: csvForm.textContent,
+          delimiter: csvForm.delimiter,
+          moduleName: csvForm.moduleName,
+          tableName: csvForm.tableName
+        });
+        
+        if (res.data.code === 200) {
+          const result = res.data.data;
+          ElMessage.success(`导入成功！共导入 ${result.successRows} 条数据`);
+          createDialogVisible.value = false;
+          refreshAll();
+        } else {
+          ElMessage.error(res.data.message || "导入失败");
+        }
+      } catch (error: any) {
+        console.error(error);
+        ElMessage.error(error.response?.data?.message || "导入失败，请检查格式");
+      } finally {
+        loading.value = false;
+      }
+      return;
+    }
+  }
+  
+  if(createType.value === 'json' && !isEditMode.value) {
+    if (jsonForm.inputMode === 'file') {
+      if (!selectedFile.value) {
+        ElMessage.warning("请选择要上传的JSON文件");
+        return;
+      }
+      
+      loading.value = true;
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile.value);
+        if (jsonForm.moduleName) {
+          formData.append('moduleName', jsonForm.moduleName);
+        }
+        if (jsonForm.tableName) {
+          formData.append('tableName', jsonForm.tableName);
+        }
+        
+        const res = await axios.post('/api/module/import-json', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        if (res.data.code === 200) {
+          const result = res.data.data;
+          ElMessage.success(`导入成功！共导入 ${result.successRows} 条数据`);
+          createDialogVisible.value = false;
+          refreshAll();
+        } else {
+          ElMessage.error(res.data.message || "导入失败");
+        }
+      } catch (error: any) {
+        console.error(error);
+        ElMessage.error(error.response?.data?.message || "导入失败，请检查文件格式");
+      } finally {
+        loading.value = false;
+      }
+      return;
+    } else {
+      if (!jsonForm.textContent || !jsonForm.textContent.trim()) {
+        ElMessage.warning("请输入JSON内容");
+        return;
+      }
+      
+      loading.value = true;
+      try {
+        const res = await axios.post('/api/module/import-json-text', {
+          jsonContent: jsonForm.textContent,
+          moduleName: jsonForm.moduleName,
+          tableName: jsonForm.tableName
+        });
+        
+        if (res.data.code === 200) {
+          const result = res.data.data;
+          ElMessage.success(`导入成功！共导入 ${result.successRows} 条数据`);
+          createDialogVisible.value = false;
+          refreshAll();
+        } else {
+          ElMessage.error(res.data.message || "导入失败");
+        }
+      } catch (error: any) {
+        console.error(error);
+        ElMessage.error(error.response?.data?.message || "导入失败，请检查格式");
+      } finally {
+        loading.value = false;
+      }
+      return;
+    }
+  }
+  
+  if(createType.value === 'database' && !isEditMode.value) {
+    if (!databaseForm.selectedTable) {
+      ElMessage.warning("请选择要导入的数据库表");
+      return;
+    }
+    
+    loading.value = true;
+    try {
+      const res = await axios.post('/api/module/import-database', null, {
+        params: {
+          tableName: databaseForm.selectedTable,
+          moduleName: databaseForm.moduleName || undefined
+        }
+      });
+      
+      if (res.data.code === 200) {
+        const result = res.data.data;
+        ElMessage.success(`导入成功！共 ${result.totalRows} 条数据`);
+        createDialogVisible.value = false;
+        refreshAll();
+      } else {
+        ElMessage.error(res.data.message || "导入失败");
+      }
+    } catch (error: any) {
+      console.error(error);
+      ElMessage.error(error.response?.data?.message || "导入失败");
+    } finally {
+      loading.value = false;
+    }
+    return;
+  }
+  
   if(!createForm.moduleName || !createForm.tableName) {
     ElMessage.warning("请填写完整信息");
     return;
@@ -477,6 +933,27 @@ const handleSubmit = async () => {
   }
 };
 
+const handleFileChange = (file: any, fileList: any[]) => {
+  const isLt10M = file.size / 1024 / 1024 < 10;
+  if (!isLt10M) {
+    ElMessage.error('文件大小不能超过 10MB!');
+    return false;
+  }
+  
+  const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+  if (!isExcel) {
+    ElMessage.error('只能上传 Excel 文件!');
+    return false;
+  }
+  
+  selectedFile.value = file.raw;
+  return true;
+};
+
+const handleExceed = () => {
+  ElMessage.warning('只能上传一个文件');
+};
+
 const handleCommand = (cmd: string, mod: any) => {
   if (cmd === 'edit') {
     handleEdit(mod);
@@ -524,7 +1001,13 @@ const handleHardDelete = async (mod: any) => {
 
 const emitNavigate = (mod: any) => emit('open-module', mod);
 
+// 处理登出
+const handleLogout = () => {
+  emit('logout');
+};
+
 onMounted(() => {
+  getUserInfo();
   refreshAll();
 });
 </script>
@@ -569,6 +1052,16 @@ onMounted(() => {
 }
 .toggle-btn:hover { color: #303133; }
 .toggle-btn.active { background: #fff; color: #409EFF; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+/* 用户信息样式 */
+.user-info { margin-left: 10px; }
+.user-avatar { 
+  display: flex; align-items: center; gap: 8px; 
+  padding: 6px 12px; border-radius: 20px; 
+  cursor: pointer; transition: background 0.2s;
+}
+.user-avatar:hover { background: #f2f6fc; }
+.user-avatar span { font-size: 14px; color: #606266; }
 
 /* 内容区 */
 .workspace-content {
@@ -669,6 +1162,28 @@ onMounted(() => {
 .deleted-actions { display: flex; gap: 8px; }
 
 /* 8. 弹窗样式 */
+.excel-upload-section {
+  padding: 10px 0;
+}
+
+.upload-demo {
+  width: 100%;
+}
+
+.upload-demo :deep(.el-upload) {
+  width: 100%;
+}
+
+.upload-demo :deep(.el-upload-dragger) {
+  width: 100%;
+}
+
+.el-upload__tip {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 7px;
+}
+
 .upload-box { border: 1px dashed #dcdfe6; background: #fafafa; padding: 30px; text-align: center; border-radius: 6px; color: #909399; }
 .icon-selector { display: flex; gap: 10px; flex-wrap: wrap; }
 .icon-opt { width: 36px; height: 36px; border: 1px solid #dcdfe6; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; color: #606266; }

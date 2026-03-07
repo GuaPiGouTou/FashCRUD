@@ -1,15 +1,30 @@
 <template>
   <div class="app-container">
-    <!-- 1. 显示工作台 -->
+    <!-- 1. 显示登录页面 -->
     <Transition name="fade" mode="out-in">
-      <ModuleDashboard 
-        v-if="currentView === 'dashboard'" 
-        @open-module="handleOpenModule" 
+      <Login 
+        v-if="!isLoggedIn" 
+        @login-success="handleLoginSuccess" 
       />
 
-      <!-- 2. 显示通用 CRUD 编辑器 -->
+      <!-- 2. 显示数据中心工作台 -->
+      <ModuleDashboard 
+        v-else-if="currentView === 'dashboard' " 
+        @open-module="handleOpenModule"
+        @open-system-dashboard="handleOpenSystemDashboard"
+        @logout="handleLogout"
+      />
+
+      <!-- 3. 显示系统统计仪表盘 -->
+      <Dashboard 
+        v-else-if="currentView === 'system-dashboard' " 
+        @back="handleBackToDashboard"
+        @logout="handleLogout"
+      />
+
+      <!-- 4. 显示通用 CRUD 编辑器 -->
       <SmartGridView 
-        v-else-if="currentView === 'grid'" 
+        v-else-if="currentView === 'grid' " 
         :active-module="activeModuleData"
         @back="handleBackToDashboard"
       />
@@ -18,28 +33,48 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-// 确保路径正确，根据你的实际文件位置调整
+import { ref, onMounted } from 'vue';
 import ModuleDashboard from './views/ModuleDashboard.vue'; 
 import SmartGridView from './views/SmartGridView.vue';
+import Login from './views/Login.vue';
+import Dashboard from './views/Dashboard.vue';
 
 // --- State ---
-const currentView = ref<'dashboard' | 'grid'>('dashboard');
+const isLoggedIn = ref(false);
+const currentView = ref<'dashboard' | 'grid' | 'system-dashboard'>('dashboard');
 const activeModuleData = ref<any>(null);
+
+// --- Lifecycle ---
+onMounted(() => {
+  const user = localStorage.getItem('user');
+  isLoggedIn.value = !!user;
+});
 
 // --- Actions ---
 
-// 从工作台接收“打开模块”信号
-const handleOpenModule = (moduleInfo: any) => {
-  console.log("打开模块:", moduleInfo);
-  activeModuleData.value = moduleInfo; // 保存当前选中的模块信息 (包含 id, tableName, moduleName 等)
-  currentView.value = 'grid';          // 切换视图
+const handleLoginSuccess = () => {
+  isLoggedIn.value = true;
+  currentView.value = 'dashboard';
 };
 
-// 从编辑器接收“返回”信号
+const handleLogout = () => {
+  localStorage.removeItem('user');
+  isLoggedIn.value = false;
+};
+
+const handleOpenModule = (moduleInfo: any) => {
+  console.log("打开模块:", moduleInfo);
+  activeModuleData.value = moduleInfo;
+  currentView.value = 'grid';
+};
+
+const handleOpenSystemDashboard = () => {
+  currentView.value = 'system-dashboard';
+};
+
 const handleBackToDashboard = () => {
   currentView.value = 'dashboard';
-  activeModuleData.value = null; // 清空选中状态
+  activeModuleData.value = null;
 };
 </script>
 

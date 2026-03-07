@@ -4,12 +4,19 @@ package com.crud.fastcrud.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.crud.fastcrud.config.JsonResult;
+import com.crud.fastcrud.dto.ExcelImportResult;
+import com.crud.fastcrud.dto.ImportResult;
 import com.crud.fastcrud.entity.module;
 import com.crud.fastcrud.mapper.moduleMapper;
 import com.crud.fastcrud.service.Impl.moduleServiceImpl;
+import com.crud.fastcrud.service.ExcelImportService;
+import com.crud.fastcrud.service.CsvImportService;
+import com.crud.fastcrud.service.JsonImportService;
+import com.crud.fastcrud.service.DatabaseImportService;
 import com.crud.fastcrud.service.moduleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -21,6 +28,14 @@ public class moduleController {
     private moduleServiceImpl moduleServiceimpl;
     @Autowired
     private moduleMapper moduleMapper;
+    @Autowired
+    private ExcelImportService excelImportService;
+    @Autowired
+    private CsvImportService csvImportService;
+    @Autowired
+    private JsonImportService jsonImportService;
+    @Autowired
+    private DatabaseImportService databaseImportService;
     /**
      * 1. 获取模块列表
      */
@@ -141,5 +156,136 @@ public class moduleController {
     public JsonResult<String> hardDelete(@PathVariable Long id) {
         moduleServiceimpl.hardDeleteModule(id);
         return new JsonResult<>(200, "彻底删除成功", "success");
+    }
+
+    // [新增] Excel导入并自动建表
+    @PostMapping("/import-excel")
+    public JsonResult<ExcelImportResult> importExcel(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "moduleName", required = false) String moduleName,
+            @RequestParam(value = "tableName", required = false) String tableName) {
+        try {
+            ExcelImportResult result = excelImportService.importExcelAndCreateTable(file, moduleName, tableName);
+            if (result.isSuccess()) {
+                return new JsonResult<>(200, result, "导入成功");
+            } else {
+                return new JsonResult<>(400, result, result.getMessage());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new JsonResult<>(500, null, "导入失败: " + e.getMessage());
+        }
+    }
+
+    // [新增] CSV导入并自动建表
+    @PostMapping("/import-csv")
+    public JsonResult<ImportResult> importCsv(
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "moduleName", required = false) String moduleName,
+            @RequestParam(value = "tableName", required = false) String tableName,
+            @RequestParam(value = "delimiter", required = false) String delimiter) {
+        try {
+            ImportResult result = csvImportService.importCsvAndCreateTable(file, moduleName, tableName, delimiter);
+            if (result.isSuccess()) {
+                return new JsonResult<>(200, result, "导入成功");
+            } else {
+                return new JsonResult<>(400, result, result.getMessage());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new JsonResult<>(500, null, "导入失败: " + e.getMessage());
+        }
+    }
+
+    // [新增] CSV文本导入
+    @PostMapping("/import-csv-text")
+    public JsonResult<ImportResult> importCsvText(
+            @RequestBody Map<String, String> request) {
+        try {
+            String csvContent = request.get("csvContent");
+            String moduleName = request.get("moduleName");
+            String tableName = request.get("tableName");
+            String delimiter = request.get("delimiter");
+            
+            ImportResult result = csvImportService.importCsvTextAndCreateTable(csvContent, moduleName, tableName, delimiter);
+            if (result.isSuccess()) {
+                return new JsonResult<>(200, result, "导入成功");
+            } else {
+                return new JsonResult<>(400, result, result.getMessage());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new JsonResult<>(500, null, "导入失败: " + e.getMessage());
+        }
+    }
+
+    // [新增] JSON导入并自动建表
+    @PostMapping("/import-json")
+    public JsonResult<ImportResult> importJson(
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "moduleName", required = false) String moduleName,
+            @RequestParam(value = "tableName", required = false) String tableName) {
+        try {
+            ImportResult result = jsonImportService.importJsonAndCreateTable(file, moduleName, tableName);
+            if (result.isSuccess()) {
+                return new JsonResult<>(200, result, "导入成功");
+            } else {
+                return new JsonResult<>(400, result, result.getMessage());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new JsonResult<>(500, null, "导入失败: " + e.getMessage());
+        }
+    }
+
+    // [新增] JSON文本导入
+    @PostMapping("/import-json-text")
+    public JsonResult<ImportResult> importJsonText(
+            @RequestBody Map<String, String> request) {
+        try {
+            String jsonContent = request.get("jsonContent");
+            String moduleName = request.get("moduleName");
+            String tableName = request.get("tableName");
+            
+            ImportResult result = jsonImportService.importJsonTextAndCreateTable(jsonContent, moduleName, tableName);
+            if (result.isSuccess()) {
+                return new JsonResult<>(200, result, "导入成功");
+            } else {
+                return new JsonResult<>(400, result, result.getMessage());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new JsonResult<>(500, null, "导入失败: " + e.getMessage());
+        }
+    }
+
+    // [新增] 获取现有数据库表列表
+    @GetMapping("/existing-tables")
+    public JsonResult<List<Map<String, Object>>> getExistingTables() {
+        try {
+            List<Map<String, Object>> tables = databaseImportService.getExistingTables();
+            return new JsonResult<>(200, tables, "success");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new JsonResult<>(500, null, "获取表列表失败: " + e.getMessage());
+        }
+    }
+
+    // [新增] 从现有数据库表导入
+    @PostMapping("/import-database")
+    public JsonResult<ImportResult> importDatabase(
+            @RequestParam("tableName") String tableName,
+            @RequestParam(value = "moduleName", required = false) String moduleName) {
+        try {
+            ImportResult result = databaseImportService.importExistingTable(tableName, moduleName);
+            if (result.isSuccess()) {
+                return new JsonResult<>(200, result, "导入成功");
+            } else {
+                return new JsonResult<>(400, result, result.getMessage());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new JsonResult<>(500, null, "导入失败: " + e.getMessage());
+        }
     }
 }

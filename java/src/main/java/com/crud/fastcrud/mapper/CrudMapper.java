@@ -115,12 +115,12 @@ public interface CrudMapper extends BaseMapper<SysFieldConfig> {
             @Param("filters") List<Map<String, Object>> filters
     );
 
-    /*
-    *
-    * */
     @Select("<script>" +
             "SELECT * FROM ${tableName} WHERE id IN " +
             "<foreach item='id' collection='ids' open='(' separator=',' close=')'>#{id}</foreach>" +
             "</script>")
     List<LinkedHashMap<String, Object>> selectDynamicByIds(@Param("tableName") String tableName, @Param("ids") List<Integer> ids);
+
+    @Update("${sql}")
+    void executeDynamicSql(@Param("sql") String sql);
 }

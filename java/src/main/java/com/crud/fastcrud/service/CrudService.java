@@ -183,33 +183,7 @@ public class CrudService {
         String options = colDef.get("options");
 
         // --- 核心：将前端 UI 类型映射为 MySQL 物理类型 ---
-        String sqlType = "VARCHAR(255) DEFAULT NULL";
-
-        switch (uiType) {
-            case "InputNumber":
-            case "Rating":      // 评分存整数 1-5
-                sqlType = "INT DEFAULT 0";
-                break;
-            case "Currency":    // 货币存高精度小数
-                sqlType = "DECIMAL(10,2) DEFAULT 0.00";
-                break;
-            case "Switch":      // 开关存 0/1
-                sqlType = "TINYINT(1) DEFAULT 0";
-                break;
-            case "DatePicker":  // 日期
-                sqlType = "DATETIME DEFAULT NULL";
-                break;
-            case "Textarea":    // 长文本
-                sqlType = "TEXT";
-                break;
-            case "Attachment":  // [新增] 附件类型
-                // 使用 TEXT 存储文件路径（如果是多文件可用 JSON 存）
-                sqlType = "TEXT";
-                break;
-            default:
-                sqlType = "VARCHAR(255) DEFAULT NULL";
-                break;
-        }
+        String sqlType = mapUiTypeToSqlType(uiType);
 
         // 1. 修改物理表结构
         crudMapper.addColumn(tableName, prop, sqlType);
@@ -231,17 +205,14 @@ public class CrudService {
     /**
      * 修改字段
      */
-    @Transactional
-    public void updateColumn(String tableName, Map<String, Object> colDef) {
-        Long id = Long.parseLong(colDef.get("id").toString());
-        String oldProp = colDef.get("oldProp").toString(); // 旧字段名(用于SQL CHANGE)
-        String newProp = colDef.get("prop").toString();
-        String label = colDef.get("label").toString();
-        String uiType = colDef.get("uiType").toString();
-        String options = colDef.get("options") != null ? colDef.get("options").toString() : null;
-
-        // 1. 计算新的 SQL 类型
+    /**
+     * 将前端 UI 类型映射为 MySQL 物理类型
+     * @param uiType 前端 UI 类型
+     * @return MySQL 物理类型定义
+     */
+    private String mapUiTypeToSqlType(String uiType) {
         String sqlType = "VARCHAR(255) DEFAULT NULL";
+
         switch (uiType) {
             case "InputNumber":
             case "Rating":
@@ -257,10 +228,28 @@ public class CrudService {
                 sqlType = "DATETIME DEFAULT NULL";
                 break;
             case "Textarea":
-            case "Attachment": // 附件也用 TEXT
+            case "Attachment":
                 sqlType = "TEXT";
                 break;
+            default:
+                sqlType = "VARCHAR(255) DEFAULT NULL";
+                break;
         }
+
+        return sqlType;
+    }
+
+    @Transactional
+    public void updateColumn(String tableName, Map<String, Object> colDef) {
+        Long id = Long.parseLong(colDef.get("id").toString());
+        String oldProp = colDef.get("oldProp").toString(); // 旧字段名(用于SQL CHANGE)
+        String newProp = colDef.get("prop").toString();
+        String label = colDef.get("label").toString();
+        String uiType = colDef.get("uiType").toString();
+        String options = colDef.get("options") != null ? colDef.get("options").toString() : null;
+
+        // 1. 计算新的 SQL 类型
+        String sqlType = mapUiTypeToSqlType(uiType);
 
         // 2. 执行物理修改 (DDL)
         // 如果字段名没变，oldProp 和 newProp 一样，MySQL 也是支持的，仅修改类型
